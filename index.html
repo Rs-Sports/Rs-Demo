@@ -45,7 +45,7 @@
   #category-fab {
     position: fixed;
     top: 20px;
-    right: 20px;
+    left: 20px;
     z-index: 9999;
   }
   #category-menu {
@@ -156,25 +156,10 @@
 }
 </style>
 </div>
-  <header class="bg-[#1a1a1a] border-b border-red-600">
-    <div class="max-w-5xl mx-auto py-4 flex justify-between items-center px-4">
-      <img alt="Rs Sports Logo" class="h-10 object-contain" src="https://imgur.com/t9VAN9c.png" />
-      <div id="clock" class="text-lg font-semibold"></div>
-    </div>
-  </header>
+  <header class="bg-[#1a1a1a] border-b border-red-600 text-center py-4">
+  <img alt="Rs Sports Logo" class="h-12 mx-auto object-contain" src="https://imgur.com/t9VAN9c.png" />
+</header>
 
-  
-<nav class="bg-black text-white p-4 shadow-md">
-  <div class="max-w-5xl mx-auto flex justify-center space-x-4">
-    <select id="categoryMenu" class="bg-gray-800 text-white px-4 py-2 rounded">
-      <option value="">Jump to Category</option>
-      <option value="#live-sports">Live Sports</option>
-      <option value="#live-tv">Live TV</option>
-      <option value="#movies">Movies</option>
-      <option value="#natok">Natok</option>
-    </select>
-  </div>
-</nav>
 <script>
 document.getElementById('categoryMenu').addEventListener('change', function() {
   if (this.value) {
