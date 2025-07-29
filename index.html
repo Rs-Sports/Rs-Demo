@@ -1,72 +1,83 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Brilliant Login Bypass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brilliant Login Demo</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #f0f0f0;
-      text-align: center;
-      padding: 50px;
+      background: #f4f4f4;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
     }
-    .container {
+    .login-box {
       background: white;
-      padding: 30px;
-      border-radius: 12px;
-      max-width: 400px;
-      margin: auto;
+      padding: 20px 30px;
+      border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      width: 300px;
     }
-    input {
-      padding: 12px;
-      width: 100%;
+    .login-box h2 {
+      text-align: center;
       margin-bottom: 20px;
+    }
+    input[type="tel"], input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
       border: 1px solid #ccc;
-      border-radius: 6px;
-      font-size: 16px;
+      border-radius: 5px;
     }
     button {
-      background: #2196F3;
-      color: white;
-      padding: 12px 20px;
-      font-size: 16px;
+      width: 100%;
+      padding: 10px;
+      background-color: #007bff;
       border: none;
-      border-radius: 6px;
+      color: white;
+      border-radius: 5px;
       cursor: pointer;
     }
     button:hover {
-      background: #0b7dda;
+      background-color: #0056b3;
+    }
+    .otp-box {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>📲 Brilliant Login Bypass</h2>
-    <p>VPN চালিয়ে ফোন নাম্বার লিখো:</p>
-    <input type="text" id="phone" placeholder="Ex: +965XXXXXXXX">
-    <button onclick="sendOTP()">Send OTP</button>
-    <p id="status"></p>
-  </div>
-
-  <script>
+  <div class="login-box">
+    <h2>Brilliant Login</h2>
+    <div class="phone-box">
+      <input type="tel" id="phone" placeholder="Enter phone number" value="01986961891" />
+      <button onclick="sendOTP()">Send OTP</button>
+    </div>
+    <div class="otp-box">
+      <input type="text" id="otp" placeholder="Enter OTP" />
+      <button onclick="verifyOTP()">Verify</button>
+    </div>
+    <p id="status" style="text-align:center; color: green;"></p>
+  </div>  <script>
     function sendOTP() {
-      const phone = document.getElementById("phone").value;
-      const status = document.getElementById("status");
-
-      if (!phone.startsWith("+")) {
-        status.innerText = "✅ নম্বরটি + দিয়ে শুরু করুন।";
-        return;
+      const phone = document.getElementById('phone').value;
+      if (phone === "01986961891") {
+        document.querySelector('.phone-box').style.display = 'none';
+        document.querySelector('.otp-box').style.display = 'block';
+        document.getElementById('status').innerText = "OTP sent: 1111 (demo)";
+      } else {
+        document.getElementById('status').innerText = "Unsupported number.";
       }
-
-      status.innerText = "⏳ OTP পাঠানো হচ্ছে...";
-
-      // এটা ফেক ডেমো, আসল API লিংক জানলে backend সংযুক্ত করা যাবে
-      setTimeout(() => {
-        status.innerText = `✅ OTP পাঠানো হয়েছে: ${phone}`;
-      }, 2000);
     }
-  </script>
-</body>
+
+    function verifyOTP() {
+      const otp = document.getElementById('otp').value;
+      if (otp === "1111") {
+        document.getElementById('status').innerText = "✅ Login successful!";
+      } else {
+        document.getElementById('status').innerText = "❌ Incorrect OTP.";
+      }
+    }
+  </script></body>
 </html>
