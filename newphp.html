@@ -1,0 +1,307 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><?php
+/**
+ * Stream Zone BD - Live Streaming Platform
+ * Fixed all syntax errors
+ */
+
+// ==================== CONFIGURATION ====================
+$config = [
+    'm3u_playlist_url' => 'https://m3u.ch/pl/994c84a0be24de06d4e92b7ec0a75d61_581c4d8797521f442f39e710d1f1ff07.m3u',
+    'default_stream_url' => '',
+    'firebase' => [
+        'api_key' => 'AIzaSyBhCpb9RsVdf9jsFqJFtJQBXMz5uZBj4xo',
+        'database_url' => 'https://rs-sportsfy-34ab8-default-rtdb.firebaseio.com',
+        'project_id' => 'rs-sportsfy-34ab8'
+    ],
+    'cache_time' => 3600 // 1 hour cache
+];
+
+// ==================== FUNCTIONS ====================
+function getCachedPlaylist($cacheFile, $cacheTime) {
+    if (file_exists($cacheFile) && (time() - filemtime($cacheFile) < $cacheTime)) {
+        return json_decode(file_get_contents($cacheFile), true);
+    }
+    return false;
+}
+
+function fetchAndParsePlaylist($url) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    
+    $response = curl_exec($ch);
+    
+    if (curl_errno($ch)) {
+        error_log('CURL Error: ' . curl_error($ch));
+        curl_close($ch);
+        return [];
+    }
+    
+    curl_close($ch);
+    
+    if ($response === false) {
+        return [];
+    }
+    
+    $channels = [];
+    $lines = explode("\n", $response);
+    
+    for ($i = 0; $i < count($lines); $i++) {
+        if (strpos($lines[$i], '#EXTINF:') === 0) {
+            $infoLine = $lines[$i];
+            $streamUrl = $lines[$i + 1];
+            
+            preg_match('/tvg-name="([^"]*)"/', $infoLine, $nameMatch);
+            $channelName = $nameMatch[1] ?? 'Unknown Channel';
+            
+            preg_match('/tvg-logo="([^"]*)"/', $infoLine, $logoMatch);
+            $logoUrl = $logoMatch[1] ?? 'https://imgur.com/plcL9BJ.jpg';
+            
+            preg_match('/group-title="([^"]*)"/', $infoLine, $groupMatch);
+            $category = strtolower($groupMatch[1] ?? 'other');
+            
+            if (strpos($category, 'movie') !== false) $category = 'movies';
+            elseif (strpos($category, 'cartoon') !== false || strpos($category, 'kids') !== false) $category = 'cartoon';
+            elseif (strpos($category, 'drama') !== false || strpos($category, 'entertainment') !== false) $category = 'drama';
+            elseif (strpos($category, 'music') !== false) $category = 'music';
+            elseif (strpos($category, 'sport') !== false) $category = 'sports';
+            
+            $channels[] = [
+                'name' => $channelName,
+                'logo' => $logoUrl,
+                'url' => $streamUrl,
+                'category' => $category
+            ];
+            
+            $i++;
+        }
+    }
+    
+    return $channels;
+}
+
+// ==================== MAIN LOGIC ====================
+$cacheFile = 'playlist_cache.json';
+$channels = getCachedPlaylist($cacheFile, $config['cache_time']);
+
+if ($channels === false) {
+    $channels = fetchAndParsePlaylist($config['m3u_playlist_url']);
+    if (!empty($channels)) {
+        file_put_contents($cacheFile, json_encode($channels));
+    }
+}
+
+if (empty($channels)) {
+    $channels = [[
+        'name' => 'Default Stream',
+        'logo' => 'https://imgur.com/plcL9BJ.jpg',
+        'url' => $config['default_stream_url'],
+        'category' => 'other'
+    ]];
+}
+
+// ==================== HTML OUTPUT ====================
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stream Zone BD</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <style>
+        
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background-color: #121212; color: #ffffff; overflow-x: hidden; }
+        .header { position: sticky; top: 0; z-index: 100; background: linear-gradient(to right, #004d00 0%, #004d00 15%, #FF0000 15%, #FF0000 85%, #004d00 85%, #004d00 100%); color: white; padding: 8px 20px; font-size: 18px; font-weight: 700; box-shadow: 0 4px 8px rgba(128, 0, 0, 0.7); text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .menu-btn { position: absolute; left: 15px; background: transparent; border: none; color: white; font-size: 28px; cursor: pointer; user-select: none; padding: 0; line-height: 1; transition: color 0.3s ease; z-index: 110; }
+        .menu-btn:hover { color: #00ffcc; }
+        .side-menu { position: fixed; top: 0; left: -250px; width: 250px; height: 100vh; background-color: #222; box-shadow: 2px 0 8px rgba(0,0,0,0.8); padding: 20px; box-sizing: border-box; transition: left 0.3s ease; z-index: 105; overflow-y: auto; }
+        .side-menu.active { left: 0; }
+        .side-menu h2 { color: #00ffcc; margin-top: 0; }
+        .side-menu ul { list-style: none; padding-left: 0; margin-top: 20px; }
+        .side-menu ul li { margin-bottom: 15px; cursor: pointer; font-size: 16px; color: white; }
+        .side-menu ul li:hover { color: #00ffcc; }
+        .video-frame { display: flex; justify-content: center; margin-top: 10px; position: relative; }
+        .video-wrapper { width: 100%; max-width: 1280px; aspect-ratio: 16 / 9; background: #000; border-radius: 15px; box-shadow: 0 0 35px rgba(0, 255, 0, 0.6); overflow: hidden; position: relative; }
+        .viewer-count { position: absolute; top: 10px; left: 15px; background: #ff0000; padding: 4px 10px; border-radius: 10px; color: #ffffff; font-weight: 600; font-size: 12px; box-shadow: 0 0 8px rgba(255, 0, 0, 0.4); z-index: 20; }
+        video { width: 100%; height: 100%; border-radius: 15px; display: none; }
+        .spinner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; gap: 8px; justify-content: center; align-items: center; z-index: 30; }
+        .spinner div { width: 12px; height: 12px; border-radius: 50%; animation: bounce 0.6s infinite alternate; }
+        .spinner div:nth-child(1) { background: red; }
+        .spinner div:nth-child(2) { background: green; animation-delay: 0.2s; }
+        .spinner div:nth-child(3) { background: blue; animation-delay: 0.4s; }
+        @keyframes bounce { to { transform: translateY(-10px); opacity: 0.5; } }
+        .marquee-container { background: #1f1f1f; color: #00ffcc; padding: 10px 0; font-weight: bold; font-size: 16px; text-align: center; }
+        .category-bar { text-align: center; background: #232323; padding: 10px; border-top: 1px solid #333; border-bottom: 1px solid #333; overflow-x: auto; white-space: nowrap; }
+        .category-bar button { background-color: #333; color: #00ffcc; border: none; padding: 8px 16px; margin: 4px; font-size: 14px; border-radius: 8px; cursor: pointer; display: inline-block; transition: 0.3s; }
+        .category-bar button:hover { background-color: #00ffcc; color: #000; }
+        .playlist-frame { max-width: 1050px; margin: 20px auto; padding: 20px; background: #1c1c1c; border-radius: 20px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3); border: 1px solid rgba(0, 255, 0, 0.2); max-height: 380px; overflow-y: auto; }
+        .channel-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; justify-items: center; }
+        .channel-item { background: #fff; border-radius: 50%; height: 80px; width: 80px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 6px 3px rgba(0, 122, 255, 0.7); transition: transform 0.3s ease, box-shadow 0.3s ease; cursor: pointer; }
+        .channel-item:hover { transform: scale(1.05); box-shadow: 0 0 10px 5px rgba(0, 255, 0, 0.6); }
+        .channel-item img { width: 75px; height: 75px; border-radius: 50%; object-fit: contain; }
+        @media (max-width: 500px) { 
+            .channel-item { height: 70px; width: 70px; }
+            .channel-item img { width: 65px; height: 65px; } 
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="menu-btn" onclick="toggleMenu()">&#9776;</button>
+        Stream Zone BD
+    </div>
+
+    <!-- Sidebar Menu -->
+    <div class="side-menu" id="sideMenu">
+        <div style="text-align: center; margin-bottom: 15px;">
+            <div style="background: #1a1a1a; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.6); display: inline-block;">
+                <img src="https://imgur.com/zdoYMxb.jpeg" alt="Logo" style="width: 100px; height: 100px; border-radius: 50%; border: 3px solid #00cc66;" />
+            </div>
+        </div>
+        <h2>*********X********</h2>
+        <ul>
+            <li onclick="alert('We are a free live sports streaming platform.'); toggleMenu();">������ About</li>
+            <li onclick="alert('We respect your privacy.'); toggleMenu();">���� Privacy</li>
+            <li onclick="window.open('https://facebook.com', '_blank'); toggleMenu();">���� Facebook</li>
+            <li onclick="window.open('https://t.me', '_blank'); toggleMenu();">���� Telegram</li>
+            <li onclick="alert('Contact: info@rssportsfy.com'); toggleMenu();">������ Contact</li>
+            <li onclick="navigator.share ? navigator.share({ title: 'RS SportsFy', text: 'Watch live!', url: location.href }) : alert('Not supported'); toggleMenu();">���� Share</li>
+        </ul>
+        <div style="text-align:center; color: gray; margin-top: 20px;">�� Stream Zone BD</div>
+    </div>
+
+    <div class="video-frame">
+        <div class="video-wrapper">
+            <div class="viewer-count" id="viewerCount"> LIVE : 0</div>
+            <div id="loading" class="spinner"><div></div><div></div><div></div></div>
+            <video id="live-video" controls autoplay></video>
+        </div>
+    </div>
+
+    <div class="marquee-container">
+        <marquee behavior="scroll" direction="left">���� Watch today's match live! Enjoy uninterrupted streaming.</marquee>
+    </div>
+
+    <div class="category-bar">
+        <button onclick="filterChannels('all')">All</button>
+        <button onclick="filterChannels('movies')">Movies</button>
+        <button onclick="filterChannels('cartoon')">Cartoon</button>
+        <button onclick="filterChannels('drama')">Drama</button>
+        <button onclick="filterChannels('music')">Music</button>
+        <button onclick="filterChannels('sports')">Sports</button>
+    </div>
+
+    <div class="playlist-frame">
+        <div class="channel-grid" id="channelGrid">
+            <?php foreach ($channels as $channel): ?>
+                <div class="channel-item" data-category="<?= htmlspecialchars($channel['category']) ?>" title="<?= htmlspecialchars($channel['name']) ?>" onclick="changeStream('<?= htmlspecialchars($channel['url'], ENT_QUOTES) ?>')">
+                    <img src="<?= htmlspecialchars($channel['logo']) ?>" alt="<?= htmlspecialchars($channel['name']) ?>" onerror="this.src='https://imgur.com/plcL9BJ.jpg'" />
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <div class="copyright" style="text-align:center; padding: 10px; color: gray; font-size: 14px;">
+        �� Stream Zone BD | 2025 All Rights Reserved.
+    </div>
+
+    <script>
+        // Firebase Configuration (values from PHP backend)
+        const firebaseConfig = {
+            apiKey: "<?= $config['firebase']['api_key'] ?>",
+            databaseURL: "<?= $config['firebase']['database_url'] ?>",
+            projectId: "<?= $config['firebase']['project_id'] ?>"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const viewersRef = db.ref("liveViewers");
+
+        // Track viewer count
+        const viewerId = Date.now().toString() + Math.random().toString(36).substring(2);
+        viewersRef.child(viewerId).set(true);
+        viewersRef.child(viewerId).onDisconnect().remove();
+
+        viewersRef.on("value", (snapshot) => {
+            const count = snapshot.numChildren();
+            document.getElementById("viewerCount").innerText = `LIVE : ${count}`;
+        });
+
+        // Video player functions
+        const video = document.getElementById('live-video');
+        const loading = document.getElementById('loading');
+        let hls;
+
+        function loadStream(src) {
+            loading.style.display = 'flex';
+            video.style.display = 'none';
+
+            if (Hls.isSupported()) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.loadSource(src);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+                hls.on(Hls.Events.FRAG_LOADED, () => {
+                    loading.style.display = 'none';
+                    video.style.display = 'block';
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        loading.style.display = 'flex';
+                        video.style.display = 'none';
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = src;
+                video.addEventListener('loadedmetadata', () => {
+                    loading.style.display = 'none';
+                    video.style.display = 'block';
+                    video.play();
+                });
+            }
+        }
+
+        function changeStream(url) {
+            loadStream(url);
+        }
+
+        function filterChannels(category) {
+            document.querySelectorAll('.channel-item').forEach(item => {
+                item.style.display = (category === 'all' || item.dataset.category === category) ? 'flex' : 'none';
+            });
+        }
+
+        function toggleMenu() {
+            document.getElementById('sideMenu').classList.toggle('active');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (event) => {
+            const menu = document.getElementById('sideMenu');
+            const button = document.querySelector('.menu-btn');
+            if (menu.classList.contains('active') && !menu.contains(event.target) && !button.contains(event.target)) {
+                menu.classList.remove('active');
+            }
+        });
+
+        // Close menu with ESC key
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                document.getElementById('sideMenu').classList.remove('active');
+            }
+        });
+
+           // Load first channel by default
+        loadStream("<?= !empty($channels) ? htmlspecialchars($channels[0]['url'], ENT_QUOTES) : $config['default_stream_url'] ?>");
+    </script>
+</body>
+</html>
